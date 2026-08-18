@@ -1232,8 +1232,6 @@ pub struct AmdsmiAsicInfoT {
     pub chip_rev_id: u32,
     pub external_rev_id: u32,
     pub reserved: [u32; 15usize],
-    pub physical_acc_id: u32,
-    pub reserved: [u32; 17usize],
 }
 #[allow(clippy::unnecessary_operation, clippy::identity_op)]
 const _: () = {
@@ -1265,8 +1263,12 @@ const _: () = {
         [::std::mem::offset_of!(AmdsmiAsicInfoT, flags) - 816usize];
     ["Offset of field: AmdsmiAsicInfoT::physical_acc_id"]
         [::std::mem::offset_of!(AmdsmiAsicInfoT, physical_acc_id) - 824usize];
+    ["Offset of field: AmdsmiAsicInfoT::chip_rev_id"]
+        [::std::mem::offset_of!(AmdsmiAsicInfoT, chip_rev_id) - 828usize];
+    ["Offset of field: AmdsmiAsicInfoT::external_rev_id"]
+        [::std::mem::offset_of!(AmdsmiAsicInfoT, external_rev_id) - 832usize];
     ["Offset of field: AmdsmiAsicInfoT::reserved"]
-        [::std::mem::offset_of!(AmdsmiAsicInfoT, reserved) - 828usize];
+        [::std::mem::offset_of!(AmdsmiAsicInfoT, reserved) - 836usize];
 };
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
