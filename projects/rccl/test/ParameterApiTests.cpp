@@ -54,6 +54,23 @@ DEFINE_NCCL_PARAM(testParamCached, int32_t, NCCL_TEST_PARAM_CACHED, 0,
 DEFINE_NCCL_PARAM(testParamPrivate, int32_t, NCCL_TEST_PARAM_PRIVATE, 0, NCCL_PARAM_FLAG_NONE,
                   NCCL_PARAM_DEFAULT, "test-only private i32 param");
 
+// Params covering the flag combinations ncclParamCheckFlag branches on. PUBLISHED alone and no
+// flags at all are already covered by testParamI32 and testParamPrivate above.
+DEFINE_NCCL_PARAM(testParamUnused, int32_t, NCCL_TEST_PARAM_UNUSED, 0, NCCL_PARAM_FLAG_UNUSED,
+                  NCCL_PARAM_DEFAULT, "test-only unused i32 param");
+DEFINE_NCCL_PARAM(testParamUnusedPub, int32_t, NCCL_TEST_PARAM_UNUSED_PUB, 0,
+                  NCCL_PARAM_FLAG_UNUSED | NCCL_PARAM_FLAG_PUBLISHED, NCCL_PARAM_DEFAULT,
+                  "test-only unused published i32 param");
+DEFINE_NCCL_PARAM(testParamDeprecated, int32_t, NCCL_TEST_PARAM_DEPRECATED, 0,
+                  NCCL_PARAM_FLAG_DEPRECATED, NCCL_PARAM_DEFAULT,
+                  "test-only deprecated i32 param");
+DEFINE_NCCL_PARAM(testParamDeprecatedPub, int32_t, NCCL_TEST_PARAM_DEPRECATED_PUB, 0,
+                  NCCL_PARAM_FLAG_DEPRECATED | NCCL_PARAM_FLAG_PUBLISHED, NCCL_PARAM_DEFAULT,
+                  "test-only deprecated published i32 param");
+DEFINE_NCCL_PARAM(testParamUnusedDep, int32_t, NCCL_TEST_PARAM_UNUSED_DEP, 0,
+                  NCCL_PARAM_FLAG_UNUSED | NCCL_PARAM_FLAG_DEPRECATED, NCCL_PARAM_DEFAULT,
+                  "test-only unused+deprecated i32 param");
+
 namespace {
 
 // Keys used across tests.
@@ -64,6 +81,11 @@ constexpr const char* kCachedKey = "NCCL_TEST_PARAM_CACHED";
 constexpr const char* kPrivateKey = "NCCL_TEST_PARAM_PRIVATE";
 constexpr const char* kDumpAllKey = "NCCL_PARAM_DUMP_ALL";
 constexpr const char* kNoCacheKey = "NCCL_NO_CACHE";
+constexpr const char* kUnusedKey = "NCCL_TEST_PARAM_UNUSED";
+constexpr const char* kUnusedPubKey = "NCCL_TEST_PARAM_UNUSED_PUB";
+constexpr const char* kDeprecatedKey = "NCCL_TEST_PARAM_DEPRECATED";
+constexpr const char* kDeprecatedPubKey = "NCCL_TEST_PARAM_DEPRECATED_PUB";
+constexpr const char* kUnusedDepKey = "NCCL_TEST_PARAM_UNUSED_DEP";
 
 // Returns true if `table` (length `len`) contains `key`.
 bool tableContains(const char** table, int len, const char* key) {
@@ -112,6 +134,58 @@ TEST(ParameterApiTests, Bind_NullArgs) {
     ASSERT_EQ(ncclParamBind(nullptr, kI32Key), ncclInvalidArgument);
     ASSERT_EQ(ncclParamBind(&h, nullptr), ncclInvalidArgument);
   });
+}
+
+TEST(ParameterApiTests, Bind_BothArgsNull_ReturnsInvalidArg) {
+  RUN_ISOLATED_TEST("Bind_BothArgsNull", []() {
+    ASSERT_EQ(ncclParamBind(nullptr, nullptr), ncclInvalidArgument);
+  });
+}
+
+TEST(ParameterApiTests, Bind_KnownKey_ReturnsSameHandleOnRebind) {
+  RUN_ISOLATED_TEST("Bind_KnownKey_SameHandle", []() {
+    ncclParamHandle_t first = nullptr;
+    ncclParamHandle_t second = nullptr;
+    ASSERT_EQ(ncclParamBind(&first, kI32Key), ncclSuccess);
+    ASSERT_EQ(ncclParamBind(&second, kI32Key), ncclSuccess);
+    ASSERT_EQ(first, second) << "bind must resolve to the one registry entry for the key";
+  });
+}
+
+// ncclParamBind must succeed for every flag combination. Flags only steer the advisory messages
+// ncclParamCheckFlag emits; they never change the return code or the handle.
+TEST(ParameterApiTests, Bind_AllFlagCombinations_Succeed) {
+  RUN_ISOLATED_TEST("Bind_AllFlagCombinations", []() {
+    constexpr const char* kKeys[] = {
+        kI32Key,            // PUBLISHED
+        kPrivateKey,        // no flags
+        kUnusedKey,         // UNUSED
+        kUnusedPubKey,      // UNUSED | PUBLISHED
+        kDeprecatedKey,     // DEPRECATED
+        kDeprecatedPubKey,  // DEPRECATED | PUBLISHED
+        kUnusedDepKey,      // UNUSED | DEPRECATED
+    };
+    for (const char* key : kKeys) {
+      ncclParamHandle_t h = nullptr;
+      EXPECT_EQ(ncclParamBind(&h, key), ncclSuccess) << "key: " << key;
+      EXPECT_NE(h, nullptr) << "key: " << key;
+    }
+  });
+}
+
+// Withholding NCCL_PARAM_FLAG_PUBLISHED only hides a param from ncclParamGetAllParameterKeys and
+// ncclParamDumpAll. A caller that knows the name can still bind it and read its value.
+TEST(ParameterApiTests, Bind_PrivateKey_HandleReadsValue) {
+  RUN_ISOLATED_TEST_WITH_ENV(
+      "Bind_PrivateKey_HandleReadsValue",
+      []() {
+        ncclParamHandle_t h = nullptr;
+        ASSERT_EQ(ncclParamBind(&h, kPrivateKey), ncclSuccess);
+        int32_t v = 0;
+        ASSERT_EQ(ncclParamGetI32(h, &v), ncclSuccess);
+        EXPECT_EQ(v, 13) << "private param must resolve from the environment like any other";
+      },
+      {{"NCCL_TEST_PARAM_PRIVATE", "13"}});
 }
 
 // ===========================================================================
